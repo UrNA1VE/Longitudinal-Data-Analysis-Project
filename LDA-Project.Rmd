@@ -1,0 +1,148 @@
+---
+title: "Untitled"
+author: "qiankang wang"
+date: "17/12/2021"
+output: pdf_document
+---
+
+```{r}
+# ----------------------Generating data for PA model (question a)-------------------
+
+# True parameters
+theta0 = 1
+alpha0 = 0.6
+m = 50
+beta0 = c(1, 1, 1)
+```
+
+```{r}
+
+# Generate the covariance matrix
+
+cov_matrix <- function(theta, alpha, n) {
+  D = sqrt(diag(n) * theta)
+  exponent <- abs(matrix(1:n - 1, nrow = n, ncol = n, byrow = TRUE) - (1:n - 1))
+  corr = alpha^exponent
+  return(D %*% corr %*% D)
+}
+
+# Generate design matrix
+design_matrix = function(ai) {
+  m = length(ai)
+  res = matrix(0, m * 4, 3)
+  res[, 1] = 1
+  res[, 2] = c(rep(0, m), rep(2, m), rep(4, m), rep(6, m))
+  res[, 3] = rep(ai, 4)
+  return(res)
+}
+```
+
+```{r}
+# Step 1
+ai = rbinom(m, 1, 0.5)
+```
+
+```{r}
+# Step 2
+# If ai = 1
+Xi_1 = matrix(0, 4, 3)
+Xi_1[, 1] = 1
+Xi_1[, 2] = c(0, 2, 4, 6)
+Xi_1[, 3] = 1
+print("If ai = 1:")
+print(Xi_1)
+
+# If ai = 1
+Xi_0 = matrix(0, 4, 3)
+Xi_0[, 1] = 1
+Xi_0[, 2] = c(0, 2, 4, 6)
+Xi_0[, 3] = 0
+print("If ai = 0:")
+print(Xi_0)
+
+# The ith row of mean_profile is the true PA mean profile of unit i
+des_matrix = design_matrix(ai)
+mean_profile = matrix(des_matrix %*% beta0, ncol = 4)
+```
+
+```{r}
+# Step 3
+# The ith row of Y is yi
+library(mvtnorm)
+Y = matrix(0, m, 4)
+for (i in 1:m) {
+  Y[i, ] = rmvnorm(1, mean_profile[i, ], sigma = cov_matrix(theta = theta0, alpha = alpha0, 4))
+}
+```
+
+
+```{r}
+# ------------------------------question b------------------------------
+library(nlme)
+df = cbind.data.frame(des_matrix, c(Y))
+colnames(df) = c("Intercept", "Time", "Group", "Response")
+# Choose compound symmetric correlation model
+model_b = gls(Response ~ . - 1, data = df, correlation = corCompSymm(0.6, form = ~Time))
+summary(model_b)
+```
+
+```{r}
+# -----------------------------question c-----------------------------
+# get estimation one time 
+simulate_onetime = function(m) {
+  ai = rbinom(m, 1, 0.5)
+  des_matrix = design_matrix(ai)
+  mean_profile = matrix(des_matrix %*% beta0, ncol = 4)
+  Y = matrix(0, m, 4)
+  for (i in 1:m) {
+    Y[i, ] = rmvnorm(1, mean_profile[i, ], sigma = cov_matrix(theta = theta0, alpha = alpha0, 4))
+  }
+  df = cbind.data.frame(des_matrix, c(Y))
+  colnames(df) = c("Intercept", "Time", "Group", "Response")
+  model = gls(Response ~ . - 1, data = df, correlation = corCompSymm(0.6, form = ~Time))
+  return(model$coefficients)
+}
+```
+
+```{r}
+# The ith row of results is the estimation of ith time
+R = 100
+results = matrix(0, R, 3)
+for (i in 1:R) {
+  results[i, ] = simulate_onetime(m)
+}
+```
+
+```{r}
+# ----------------------question d-----------------------------------
+# Get relative bias RB
+RB = ((colMeans(results) - beta0)/beta0) * 100
+
+# Get MSE of estimation MSE
+MSE = colMeans((results - beta0)^2)
+
+```
+
+```{r}
+# --------------------question e-------------------------------------
+for (m in c(50, 100, 200)) {
+  R = 100
+  results = matrix(0, R, 3)
+  for (i in 1:R) {
+    results[i, ] = simulate_onetime(m)
+  }
+  print(paste0("When size is：", m))
+  RB = ((colMeans(results) - beta0)/beta0) * 100
+  print(paste0("RB for intercept is:", round(RB[1], 4), "%"))
+  print(paste0("RB for Time is:", round(RB[2], 4), "%"))
+  print(paste0("RB for ai is:", round(RB[3], 4), "%"))
+  
+  MSE = colMeans((results - beta0)^2)
+  print(paste0("MSE for intercept is:", round(MSE[1], 4)))
+  print(paste0("MSE for Time is:", round(MSE[2], 4)))
+  print(paste0("MSE for ai is:", round(MSE[3], 4)))
+}
+
+```
+
+
